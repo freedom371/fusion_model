@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="400" viewBox="0 0 760 400">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#475569"/>
+    </marker>
+  </defs>
+  <rect width="100%" height="100%" fill="#f8fafc"/>
+  <text x="36" y="42" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" fill="#0f172a">Pathology UNI2 Binary Recurrence Model</text>
+  <rect x="40" y="90" width="250" height="140" rx="18" fill="#dbeafe" stroke="#1f2937" stroke-width="2"/>
+<text x="56" y="118" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" fill="#0f172a">Pathology Input</text>
+<text x="56" y="144" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#334155">UNI2 slide feature</text>
+<text x="56" y="166" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#334155">npy per patient</text>
+<text x="56" y="188" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#334155">shape: (B, 1536)</text>
+<rect x="360" y="90" width="310" height="230" rx="18" fill="#fecaca" stroke="#1f2937" stroke-width="2"/>
+<text x="376" y="118" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" fill="#0f172a">MLP Encoder / Classifier</text>
+<text x="376" y="144" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#334155">Dropout</text>
+<text x="376" y="166" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#334155">Linear 1536 -> 512 + LN + ReLU</text>
+<text x="376" y="188" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#334155">Dropout</text>
+<text x="376" y="210" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#334155">Linear 512 -> 128 + LN + ReLU</text>
+<text x="376" y="232" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#334155">Dropout</text>
+<text x="376" y="254" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#334155">Linear 128 -> 32 + LN + ReLU</text>
+<text x="376" y="276" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#334155">Dropout</text>
+<text x="376" y="298" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#334155">Linear 32 -> 1</text>
+<line x1="290" y1="160" x2="360" y2="160" stroke="#475569" stroke-width="3" marker-end="url(#arrow)"/>
+<text x="40" y="355" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#475569">Code basis: pathology_model/dataset.py and pathology_model/model.py</text>
+</svg>

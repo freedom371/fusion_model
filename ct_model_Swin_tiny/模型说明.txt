@@ -1,0 +1,83 @@
+CT Only Model 是一个基于术前 CT 增强图像的单模态深度学习模型，仅利用 CT 影像进行复发风险预测。当前训练目录已切换为 ConvNeXt-Tiny + slice aggregation 方案，模型结构如下：
+
+【Backbone 骨干网络】
+采用 ConvNeXt-Tiny 作为 2D 图像特征提取器。
+每一层 CT slice 独立送入 backbone，灰度图会复制为 3 通道以适配自然图像预训练结构。
+ConvNeXt-Tiny 全局池化后输出 768 维特征向量。
+默认可冻结 backbone；当前本地 `images/convnext/model.safetensors` 与 Tiny 维度不兼容，因此默认不加载该本地权重。
+
+【Slice Encoder】
+投影层：Linear(768→256) + LayerNorm(256) + GELU
+将每张 slice 的 768 维特征压缩为 256 维 slice token。
+
+【Slice Aggregation】
+对 3 个 slice token 加入可学习的位置编码。
+使用 Multi-Head Self-Attention 在 slice 维度建模切片间关系。
+随后使用两种病例级聚合方式：
+1. Attention Pooling：学习每张 slice 的权重并加权求和
+2. Mean Pooling：对所有 slice token 求平均
+最终将两种 pooled 特征拼接为病例级表示。
+
+【分类器 Classifier】
+MLP：512 → 128 → 1
+其中包含 LayerNorm、GELU 和 Dropout，最终输出 1 个 logit 用于二分类。
+
+【输入与预处理】
+输入：一个病例的 3 张 CT slice（`max`、`above`、`below`），统一缩放至 128×128。
+训练阶段不读取 mask，也不再执行 mask 乘法。
+几何增强（三张 CT 同步，概率 40%）：水平翻转、旋转(±8°)、平移(±4%)、缩放(95%-105%)。
+强度增强（三张 CT 同步，概率 40%）：高斯噪声(std=0.015)、亮度(0.95-1.05)、对比度(0.95-1.05)、Gamma(0.95-1.05)。
+归一化：Normalize(mean=0.5, std=0.5)，映射到 [-1, 1]。
+
+
+The CT Only Model is a single-modal deep learning model based on preoperative contrast-enhanced CT images for recurrence risk prediction.
+
+[Backbone]
+ConvNeXt-Tiny is used as the 2D image feature extractor.
+Each CT slice is encoded independently, and grayscale input is repeated to 3 channels before entering the backbone.
+The backbone outputs 768-dim global features after pooling.
+The existing local `images/convnext/model.safetensors` file is not shape-compatible with ConvNeXt-Tiny, so local loading is disabled by default.
+
+[Slice Encoder]
+Projection: Linear(768→256) + LayerNorm(256) + GELU
+This converts each slice feature into a 256-dim slice token.
+
+[Slice Aggregation]
+Learnable positional embeddings are added to the 3 slice tokens.
+Multi-head self-attention models interactions across slices.
+Two case-level pooled features are then computed:
+1. Attention pooling across slices
+2. Mean pooling across slices
+The pooled features are concatenated into one case representation.
+
+[Classifier]
+MLP: 512 → 128 → 1
+LayerNorm, GELU, and Dropout are used before the final binary logit.
+
+[Input & Preprocessing]
+Input: three CT slices per case (`max`, `above`, `below`), resized to 128×128.
+No mask is read during training, and no mask multiplication is applied.
+Geometric augmentation is synchronized across slices: HFlip, Rotation(±8°), Translation(±4%), Scale(95%-105%).
+Intensity augmentation is also synchronized across slices: GaussianNoise(std=0.015), Brightness(0.95-1.05), Contrast(0.95-1.05), Gamma(0.95-1.05).
+Normalization uses mean=0.5 and std=0.5 for all slices.
+
+
+• 损失函数：BCEWithLogitsLoss（二分类交叉熵）
+• 优化器：AdamW，学习率 lr=5e-5，权重衰减 weight_decay=1e-4
+• 学习率调度：CosineAnnealingLR，T_max=80，eta_min=1e-8
+• Batch Size：16，Epochs：80，Early Stop Patience：20（预热期 6 epoch，基于 val_auc）
+• 混合精度训练：AMP (GradScaler) 开启
+• 正则化：Dropout=0.2, Label Smoothing=0.08, Mixup Alpha=0.10, Grad Clip=1.0
+• 数据加载：num_workers=4，pin_memory=True，训练集 shuffle + drop_last
+• 随机种子：默认配置中为多种子稳定性评估
+
+
+Training Parameters
+• Loss: BCEWithLogitsLoss
+• Optimizer: AdamW, lr=5e-5, weight_decay=1e-4
+• Scheduler: CosineAnnealingLR, T_max=80, eta_min=1e-8
+• Batch Size: 16, Epochs: 80, Early Stop Patience: 20
+• Mixed Precision: AMP enabled
+• Regularization: Dropout=0.2, Label Smoothing=0.08, Mixup Alpha=0.10, Grad Clip=1.0
+• DataLoader: num_workers=4, pin_memory=True
+• Seeds: multi-seed evaluation in the default config

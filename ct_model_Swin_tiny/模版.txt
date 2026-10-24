@@ -1,0 +1,50 @@
+CT Only Model 是一个基于术前 CT 增强图像的单模态深度学习模型，仅利用 CT 影像进行复发风险预测。当前模型采用 ConvNeXt-Tiny + slice aggregation 结构。
+
+【Backbone 骨干网络】
+采用 ConvNeXt-Tiny 作为 2D 图像特征提取器。
+每张 CT slice 单独进入 backbone，灰度图复制成 3 通道后提取特征。
+backbone 输出 768 维全局特征。
+
+【Slice Encoder】
+投影层：Linear(768→256) + LayerNorm + GELU
+将每张 slice 压缩为 256 维 token。
+
+【Slice Aggregation】
+对 3 个 slice token 加入位置编码。
+使用 Multi-Head Self-Attention 建模切片间关系。
+随后同时做 attention pooling 和 mean pooling，并将两者拼接为病例级特征。
+
+【分类器 Classifier】
+MLP：512 → 128 → 1
+包含 LayerNorm、GELU 和 Dropout，最终输出二分类 logit。
+
+【输入与预处理】
+输入为一个病例的 3 张 CT slice，统一缩放到 128×128。
+训练时不读取 mask，不拼接临床或病理特征。
+增强在 3 张切片之间同步应用，包括轻度几何扰动和强度扰动。
+
+
+The CT Only Model is a single-modal deep learning model based on preoperative CT images. The current architecture is ConvNeXt-Tiny + slice aggregation.
+
+[Backbone]
+ConvNeXt-Tiny is used as the 2D feature extractor.
+Each CT slice is encoded independently, with grayscale input repeated to 3 channels.
+The backbone outputs 768-dim global features.
+
+[Slice Encoder]
+Projection: Linear(768→256) + LayerNorm + GELU
+Each slice is converted into a 256-dim token.
+
+[Slice Aggregation]
+Learnable positional embeddings are added to the 3 slice tokens.
+Multi-head self-attention models inter-slice relationships.
+Attention pooling and mean pooling are both applied, then concatenated into one case-level feature.
+
+[Classifier]
+MLP: 512 → 128 → 1
+LayerNorm, GELU, and Dropout are used before the final binary logit.
+
+[Input & Preprocessing]
+Input is a 3-slice CT case resized to 128×128.
+No mask, clinical, or pathology features are used in this directory.
+Augmentations are synchronized across the 3 slices.

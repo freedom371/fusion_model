@@ -1,0 +1,65 @@
+# ==================== Python 缓存 ====================
+__pycache__/
+*.pyc
+.cache/
+
+# ==================== 数据与训练素材 ====================
+# 训练数据目录(CSV 表格、CT 影像、病理特征),按 README 目录说明整体忽略
+data/
+feature_extraction/data/
+feature_extraction/outputs/
+
+# 预训练模型权重目录(Swin / ConvNeXt)
+images/swin/
+images/convnext/
+
+# 图片素材(CT 图像、CAM/GradCAM 输出等)
+*.png
+*.jpg
+*.jpeg
+*.npy
+
+# ==================== 模型权重文件 ====================
+*.pt
+*.pth
+*.safetensors
+*.ckpt
+*.pkl
+*.bin
+
+# ==================== 训练记录与输出 ====================
+# 训练日志
+*.log
+wget-log
+ct_model_Swin_tiny/log.txt
+
+# 代码工具会话标记文件
+.codex
+
+# 结果表格 / 筛选计划 / 备份记录
+*.csv
+*.json
+*.bak
+*.bak_*
+*.7z
+*.zip
+
+# 各模型训练输出目录(权重 checkpoint、评估指标、CAM 图)
+output/
+
+# fusion_model CAM 分析输出目录(代码脚本保留)
+fusion_model/cam/example/
+fusion_model/cam/full_tissue_output/
+fusion_model/cam/fusion_full_tissue_output_seed1013/
+fusion_model/cam/output_seed1583/
+fusion_model/cam/pathology_cam_output/
+
+# 样本筛选输出目录
+sample_clean/label_l_out*/
+
+# 临床模型的结果报告文件(代码脚本保留)
+clin_model/analyze_loo_gain_report.txt
+clin_model/restore_half_flips_log_20261014_000125.txt
+
+# 特征提取目录中的打包数据与安装包
+feature_extraction/Miniconda3-latest-Linux-x86_64.sh
