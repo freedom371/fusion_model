@@ -71,6 +71,22 @@ def plot_history(frame, destination, best_epoch):
             column = f"{split}_{metric}"
             if column in frame:
                 axis.plot(frame.epoch, frame[column], label=split, marker="o" if len(frame) == 1 else None)
+        # Mark the best test-set values for the two requested metrics.  Test
+        # is never used for checkpoint selection; this is only a visual aid.
+        if metric in ("auc", "acc"):
+            column = f"test_{metric}"
+            values = pd.to_numeric(frame[column], errors="coerce").dropna() if column in frame else pd.Series(dtype=float)
+            if not values.empty:
+                row_index = values.idxmax()
+                epoch = frame.loc[row_index, "epoch"]
+                value = float(frame.loc[row_index, column])
+                axis.scatter([epoch], [value], color="#d62728", s=48, zorder=5,
+                             label=f"test best {metric.upper()}={value:.4f} (ep{int(epoch)})")
+                axis.annotate(f"Best test {metric.upper()}={value:.4f}\nep{int(epoch)}",
+                              xy=(epoch, value), xytext=(8, 10),
+                              textcoords="offset points", fontsize=8, color="#b22222",
+                              bbox={"boxstyle": "round,pad=0.25", "fc": "white",
+                                    "ec": "#d62728", "alpha": 0.85})
         axis.axvline(best_epoch, linestyle="--", color="gray", label="best val AUC")
         axis.set(xlabel="Epoch", ylabel=metric.upper())
         axis.legend()
@@ -84,11 +100,17 @@ def train_one(args, variant, seed, cohort, run_dir, group_by_model=True):
     seed_everything(seed)
     device = torch.device(args.device)
     modalities = MODALITIES[variant]
-    destination = (run_dir / variant if group_by_model else run_dir) / f"seed{seed}"
-    destination.mkdir(parents=True, exist_ok=False)
+    destination = run_dir / variant if group_by_model else run_dir
+    destination.mkdir(parents=True, exist_ok=True)
+    # Every artifact is flat in the model output directory.  The prefix makes
+    # repeated runs and multiple seeds unambiguous without per-run subfolders.
+    artifact_prefix = f"{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_seed{seed}"
+    artifact = lambda name: destination / f"{artifact_prefix}_{name}"
+    curves_dir = Path(args.curves_dir)
+    curves_dir.mkdir(parents=True, exist_ok=True)
     preprocessing = fit_preprocessing(cohort, modalities)
-    joblib.dump(preprocessing, destination / "preprocessing.joblib")
-    cohort.to_csv(destination / "cohort.csv", index=False)
+    joblib.dump(preprocessing, artifact("preprocessing.joblib"))
+    cohort.to_csv(artifact("cohort.csv"), index=False)
     datasets = {split: AblationDataset(cohort, split, modalities, preprocessing)
                 for split in ("train", "val", "test")}
     training = AblationDataset(cohort, "train", modalities, preprocessing, use_aug=True)
@@ -124,9 +146,10 @@ def train_one(args, variant, seed, cohort, run_dir, group_by_model=True):
         "data_paths": {"ct": str(base.DATA_CT_DIR), "pathology": str(base.DATA_PATH_DIR),
                        "clinical": str(base.CLINICAL_CSV)},
     }
-    (destination / "config.json").write_text(json.dumps(metadata, indent=2, default=str))
+    metadata["artifact_prefix"] = artifact_prefix
+    (artifact("config.json")).write_text(json.dumps(metadata, indent=2, default=str))
     best_auc, best_epoch, stale, history = -float("inf"), 0, 0, []
-    checkpoint = destination / "best_model.pt"
+    checkpoint = artifact("best_model.pt")
     print(f"\n[{variant} seed={seed}] counts={metadata['counts']} output={destination}", flush=True)
     for epoch in range(1, epochs + 1):
         model.train()
@@ -163,7 +186,7 @@ def train_one(args, variant, seed, cohort, run_dir, group_by_model=True):
         for split, metrics in (("train", train_metrics), ("val", val_metrics), ("test", test_metrics)):
             row.update({f"{split}_{key}": value for key, value in metrics.items()})
         history.append(row)
-        pd.DataFrame(history).to_csv(destination / "history.csv", index=False)
+        pd.DataFrame(history).to_csv(artifact("history.csv"), index=False)
         print(f"[{variant} seed={seed}] epoch={epoch} train_loss={loss_sum/count:.4f} "
               f"val_auc={val_metrics['auc']} val_acc={val_metrics['acc']:.4f} "
               f"test_loss={test_metrics['loss']:.4f} test_auc={test_metrics['auc']} "
@@ -173,13 +196,17 @@ def train_one(args, variant, seed, cohort, run_dir, group_by_model=True):
     saved = torch.load(checkpoint, map_location=device, weights_only=False)
     model.load_state_dict(saved["model_state_dict"])
     result = {"model": variant, "seed": seed, "best_epoch": best_epoch,
-              "smoke_test": args.smoke_test, "output_dir": str(destination)}
+              "smoke_test": args.smoke_test, "output_dir": str(destination),
+              "artifact_prefix": artifact_prefix}
     for split, eval_loader in eval_loaders.items():
         metrics, predictions = evaluate(model, eval_loader, device)
-        predictions.to_csv(destination / f"{split}_prob.csv", index=False)
+        predictions.to_csv(artifact(f"{split}_prob.csv"), index=False)
         result[split] = metrics
-    (destination / "results.json").write_text(json.dumps(result, indent=2, allow_nan=False))
-    plot_history(pd.DataFrame(history), destination / "curves.png", best_epoch)
+    artifact("results.json").write_text(json.dumps(result, indent=2, allow_nan=False))
+    curves_path = curves_dir / f"{artifact_prefix}_{variant}_curves.png"
+    result["curves_path"] = str(curves_path)
+    artifact("results.json").write_text(json.dumps(result, indent=2, allow_nan=False))
+    plot_history(pd.DataFrame(history), curves_path, best_epoch)
     print(f"[{variant} seed={seed}] best epoch={best_epoch}; test={result['test']}", flush=True)
     return result
 
@@ -201,6 +228,8 @@ def parse_args(fixed_model=None, conf=None, argv=None):
         parser.add_argument("--" + key.replace("_", "-"), type=float, default=DEFAULTS[key])
     parser.add_argument("--label-csv", type=Path, default=base.LABEL_CSV)
     parser.add_argument("--output-dir", type=Path, default=OUTPUT_DIR)
+    parser.add_argument("--curves-dir", type=Path, default=None,
+                        help="Common directory for all curves PNG files")
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     amp_group = parser.add_mutually_exclusive_group()
     amp_group.add_argument("--no-amp", dest="no_amp", action="store_true")
@@ -215,7 +244,7 @@ def parse_args(fixed_model=None, conf=None, argv=None):
                    "early_stop_patience": "patience", "num_workers": "workers"}
         supported = {"seed", "batch_size", "num_epochs", "lr", "weight_decay",
                      "early_stop_patience", "num_workers", "dropout", "use_amp", "freeze_ct_backbone",
-                     "output_dir"}
+                     "output_dir", "curves_dir"}
         unknown = set(conf) - supported
         if unknown:
             raise ValueError(f"Unknown conf parameters: {sorted(unknown)}")
@@ -232,6 +261,9 @@ def parse_args(fixed_model=None, conf=None, argv=None):
         parser.set_defaults(**defaults)
     args = parser.parse_args(argv)
     args.output_dir = Path(args.output_dir).expanduser()
+    if args.curves_dir is None:
+        args.curves_dir = args.output_dir / "curves"
+    args.curves_dir = Path(args.curves_dir).expanduser()
     if min(args.epochs, args.batch_size, args.patience) < 1 or args.workers < 0:
         parser.error("epochs, batch-size and patience must be positive; workers must be nonnegative")
     if args.lr <= 0 or args.weight_decay < 0 or not 0 <= args.dropout < 1:
@@ -249,7 +281,12 @@ def main(fixed_model=None, conf=None):
     if not args.smoke_test and cohort.loc[cohort.split == "val", "label"].nunique() != 2:
         raise ValueError("Validation split needs both classes to select by AUC")
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    run_dir = args.output_dir.resolve() / (("smoke_" if args.smoke_test else "run_") + stamp)
+    if fixed_model is not None:
+        # Independent scripts write directly into their model-specific folder.
+        run_dir = args.output_dir.resolve()
+    else:
+        run_dir = args.output_dir.resolve() / (("smoke_" if args.smoke_test else "run_") + stamp)
+    run_dir.mkdir(parents=True, exist_ok=True)
     variants = PAIR_MODELS if args.model == "all" else (args.model,)
     results = []
     for variant in variants:
@@ -262,10 +299,11 @@ def main(fixed_model=None, conf=None):
                     rows.append({key: value for key, value in result.items() if key not in ("train", "val", "test")} |
                                 {"split": split} | result[split])
             summary = pd.DataFrame(rows)
-            summary.to_csv(run_dir / "summary.csv", index=False)
+            summary_prefix = results[-1]["artifact_prefix"]
+            summary.to_csv(run_dir / f"{summary_prefix}_summary.csv", index=False)
             summary.groupby(["model", "split"])[["auc", "acc", "sensitivity", "specificity"]].agg(
-                ["mean", "std"]).to_csv(run_dir / "summary_mean_std.csv")
-    print(f"\nResults: {run_dir / 'summary.csv'}", flush=True)
+                ["mean", "std"]).to_csv(run_dir / f"{summary_prefix}_summary_mean_std.csv")
+    print(f"\nResults: {run_dir}", flush=True)
 
 
 if __name__ == "__main__":

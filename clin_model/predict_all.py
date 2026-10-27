@@ -84,7 +84,7 @@ result = pd.DataFrame({
     'pred_prob': np.round(pred_proba, 6),
     'pred_label': pred_label,
 })
-# 附上 11 个特征值, 便于核查与后续分析
+# 附上 6 个特征值, 便于核查与后续分析
 result = pd.concat([result, df[feature_cols].reset_index(drop=True)], axis=1)
 result['correct'] = (result['label'] == result['pred_label']).astype(int)
 

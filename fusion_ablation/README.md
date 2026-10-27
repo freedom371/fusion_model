@@ -92,31 +92,42 @@ conf = {
 
 ## 输出
 
-三个独立脚本分别输出到以下目录，可在各自的 `conf["output_dir"]` 中改名，
+三个独立脚本分别输出模型文件到以下目录，可在各自的 `conf["output_dir"]` 中改名；
+每个模型的曲线图输出到该模型自己的 `curves/` 子目录，也可通过各脚本的
+`conf["curves_dir"]` 修改，
 或用 `--output-dir /path/to/results` 临时覆盖。默认路径以脚本位置为基准，不受启动目录影响：
 
 ```text
 fusion_ablation/output/clinical_ct/
 fusion_ablation/output/clinical_pathology/
 fusion_ablation/output/ct_pathology/
+fusion_ablation/output/clinical_ct/curves/
+fusion_ablation/output/clinical_pathology/curves/
+fusion_ablation/output/ct_pathology/curves/
 ```
 
-每个模型目录内按运行时间和种子保存，避免覆盖旧结果：
+所有文件直接保存在对应模型目录，不再创建 run/seed 子目录。每个文件都使用
+`时间戳_seed种子_` 前缀，避免覆盖旧结果：
 
 ```text
-fusion_ablation/output/<模型>/run_<时间>/seed<种子>/
-  best_model.pt           # 模型参数、最佳 epoch、模型构造参数
-  preprocessing.joblib   # train 拟合的补全器及归一化统计量
-  config.json            # 超参数、输入路径、标签文件 SHA256
-  cohort.csv             # 本次固定的患者 ID/标签/划分
-  history.csv / curves.png
-  train_prob.csv / val_prob.csv / test_prob.csv
-  results.json
+fusion_ablation/output/<模型>/
+  20261024_120000_123456_seed1583_best_model.pt
+  20261024_120000_123456_seed1583_preprocessing.joblib
+  20261024_120000_123456_seed1583_config.json
+  20261024_120000_123456_seed1583_cohort.csv
+  20261024_120000_123456_seed1583_history.csv
+  20261024_120000_123456_seed1583_train_prob.csv
+  20261024_120000_123456_seed1583_val_prob.csv
+  20261024_120000_123456_seed1583_test_prob.csv
+  20261024_120000_123456_seed1583_results.json
+
+fusion_ablation/output/<模型>/curves/
+  20261024_120000_123456_seed1583_clinical_ct_curves.png
 ```
 
-本次运行顶层提供 `summary.csv` 和 `summary_mean_std.csv`。概率表字段为 `base_id,label,pred,pred_class`，阈值固定 0.5。单一种子的标准差为空。快速检查保存在 `smoke_<时间>`，配置、权重和结果均带 `smoke_test` 标记。
+本次运行提供带相同前缀的 `*_summary.csv` 和 `*_summary_mean_std.csv`。曲线图包含 train、val、test 的 Loss/AUC/ACC，并在 AUC 和 ACC 子图标注 test 集各自的最佳值及 epoch。概率表字段为 `base_id,label,pred,pred_class`，阈值固定 0.5。单一种子的标准差为空。快速检查也直接保存在对应模型目录，配置、权重和结果均带 `smoke_test` 标记。
 
-公共入口 `python -m fusion_ablation.train` 仍使用 `output/run_<时间>/<模型>/seed<种子>/` 结构。
+公共入口 `python -m fusion_ablation.train` 仍会创建一次运行目录；独立脚本按上述平铺规则保存。
 旧运行结果保留在原路径。
 
 旧运行未记录逐 epoch 的 test 指标，无法仅凭旧 `history.csv` 补出 test 曲线；需要重新执行训练脚本。三个独立训练入口均使用更新后的绘图逻辑。
@@ -124,7 +135,7 @@ fusion_ablation/output/<模型>/run_<时间>/seed<种子>/
 复用已保存的统计量和权重重新导出概率：
 
 ```bash
-python -m fusion_ablation.export_prob fusion_ablation/output/clinical_ct/run_<时间>/seed1583
+python -m fusion_ablation.export_prob fusion_ablation/output/clinical_ct --prefix 20261024_120000_123456_seed1583
 ```
 
 重新导出使用当前 `fusion_model/config.py` 的数据路径，需保持原始输入与代码配置一致；不重新拟合预处理器。Swin 初次构造仍按现有配置从 timm 加载预训练权重，需要本机缓存或网络。
