@@ -174,16 +174,20 @@ class CTDirectEncoder(nn.Module):
         if x.shape[1] != 3:
             raise ValueError(f"Expected 3 CT slices as channels, got {x.shape[1]}")
 
-        if self.freeze_backbone:
-            with torch.no_grad():
-                return self._extract_features(x)
-        else:
-            return self._extract_features(x)
+        return self._extract_features(x)
 
     def _extract_features(self, x: torch.Tensor) -> torch.Tensor:
-        """forward_features → NHWC 特征图 → permute 到 NCHW → SE/CBAM → 全局平均池化。"""
+        """forward_features → NHWC 特征图 → permute 到 NCHW → SE/CBAM → 全局平均池化。
+
+        注意: no_grad 只能包住 backbone,不能包住 attention。
+        否则冻结 backbone 时 SE/CBAM 参数收不到梯度,永远不会更新。
+        """
         # (B, 3, H, W) → (B, H', W', C)
-        feat = self.backbone.forward_features(x)
+        if self.freeze_backbone:
+            with torch.no_grad():
+                feat = self.backbone.forward_features(x)
+        else:
+            feat = self.backbone.forward_features(x)
         # NHWC → NCHW
         feat = feat.permute(0, 3, 1, 2).contiguous()
         # 2D 注意力
