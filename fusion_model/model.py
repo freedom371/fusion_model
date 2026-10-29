@@ -196,13 +196,16 @@ class CTEncoder(nn.Module):
         if x.shape[1] != 3:
             raise ValueError(f"Expected 3 CT views as channels, got {x.shape[1]}")
 
-        if self.freeze_backbone:
-            with torch.no_grad():
-                return self._extract_features(x)
         return self._extract_features(x)
 
     def _extract_features(self, x: torch.Tensor) -> torch.Tensor:
-        feat = self.backbone.forward_features(x)
+        # no_grad 只能包住 backbone,不能包住 attention/proj,
+        # 否则冻结 backbone 时 CBAM 和 proj 参数收不到梯度,永远不会更新。
+        if self.freeze_backbone:
+            with torch.no_grad():
+                feat = self.backbone.forward_features(x)
+        else:
+            feat = self.backbone.forward_features(x)
         feat = feat.permute(0, 3, 1, 2).contiguous()
         feat = self.attention(feat)
         feat = feat.mean(dim=(2, 3))
