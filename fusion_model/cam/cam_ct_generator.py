@@ -15,6 +15,7 @@ import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.colors import Normalize, LinearSegmentedColormap
 import os
 import sys
 from pathlib import Path
@@ -36,6 +37,19 @@ DATA_CT_ORIGINAL_DIR = ROOT / "data/images/ct_5"
 # ── 裁剪参数（与 crop_tumor.py 保持一致）──────────────────────────
 _CROP_EXPAND_FACTOR = 1.35
 _CROP_PADDING = 5
+
+# ── 热力图 LUT: 基于 cv2.COLORMAP_JET, 但顶端 12.5% 改为恒定亮红 ──
+# 经典 jet 的顶端是暗红(128,0,0)→亮红(255,0,0)的渐变, 色条顶端会显得
+# 发暗、看着"没有红色"。这里把 LUT[224:] 全改为亮红(255,0,0),
+# 叠加图上色与色条共用此 LUT, 保证逐位一致。
+_CV2_JET_LUT_BGR = cv2.applyColorMap(
+    np.arange(256, dtype=np.uint8), cv2.COLORMAP_JET
+).reshape(256, 1, 3)  # cv2 自定义 LUT 要求 (256, 1, 3)
+_CV2_JET_LUT_BGR[224:] = np.array([0, 0, 255], dtype=np.uint8)  # BGR 亮红
+CV2_JET_CMAP = LinearSegmentedColormap.from_list(
+    "cv2_jet_bright",
+    _CV2_JET_LUT_BGR[:, 0, ::-1].astype(np.float32) / 255.0,  # BGR→RGB, 0~1
+)
 
 
 def _expand_mask(mask: np.ndarray, factor: float) -> np.ndarray:
@@ -327,7 +341,7 @@ class ResidualCAMGenerator:
         # ── 5. CAM 上色后 mask 非肿瘤区域 ──
         # 注意：必须先上色再 mask，否则 JET colormap 会把 0 映射为深蓝色
         heatmap_full = cv2.applyColorMap(
-            np.uint8(255 * cam_full), cv2.COLORMAP_JET
+            np.uint8(255 * cam_full), _CV2_JET_LUT_BGR
         )
         heatmap_full = cv2.cvtColor(heatmap_full, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
 
@@ -393,7 +407,14 @@ class ResidualCAMGenerator:
         plt.figure(figsize=(5, 5))
         plt.imshow(cam_img)
         plt.axis("off")
-        plt.colorbar(fraction=0.046, pad=0.04)
+        # 色条须与图上热力图同口径: 叠加图用 cv2.COLORMAP_JET(255*cam) 上色
+        # (0→蓝, 1→红), 直接 plt.colorbar() 会拿到默认 viridis 色条(无红色)。
+        # 用 cv2 JET LUT 自建 colormap, 保证色条与图上颜色逐位一致。
+        cbar_sm = plt.cm.ScalarMappable(norm=Normalize(vmin=0.0, vmax=1.0),
+                                        cmap=CV2_JET_CMAP)
+        cbar_sm.set_array([])
+        plt.colorbar(cbar_sm, ax=plt.gca(), fraction=0.046, pad=0.04,
+                     label="Grad-CAM value (0=low, 1=high)")
         plt.title(f"Grad-CAM ({title})", fontsize=10)
         plt.tight_layout()
         plt.savefig(save_path, dpi=200, bbox_inches="tight")
@@ -457,8 +478,9 @@ def main():
             / "output" / "cmt_cpg" / "checkpoints" / "best_model_seed1583.pt"
         ),
         # 输出按 seed 分开存放, 避免覆盖旧 seed 的结果
+        # v2 = 10-29 重训版权重 (epoch 18, val AUC 0.8637)
         "output_root": str(
-            Path(__file__).resolve().parent / "output_seed1583"
+            Path(__file__).resolve().parent / "output_seed1583_v2"
         ),
         "split": "all",          # all = train + val + test (label_l 共 649 例, 已排除 exclude 组)
         "target_class": 1,       # 1=复发, 0=无复发

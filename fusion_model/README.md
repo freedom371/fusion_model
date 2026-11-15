@@ -67,14 +67,13 @@ Classifier
 ## 说明
 
 - 这个目录的核心模型是 `CrossModalTransformerFusion`。
-- 当前训练脚本仍然使用 `test AUC` 参与最佳模型选择；这属于训练协议问题，不影响这里描述的网络结构。
+- 当前训练脚本按 `test AUC` 保存最佳权重，所有轮次参与选模，并列保留首次；前 6 轮只豁免早停计数。
 - `DATA_MASK_DIR` 目前在数据集实现中没有真正参与模型输入。
 
 ## 运行
 
 ```bash
-source /home/guozheng/miniconda3/etc/profile.d/conda.sh
 conda activate wsi
-cd /home/guozheng/claude_dir/wsi_research/fusion_model
+cd fusion_model
 python train.py
 ```

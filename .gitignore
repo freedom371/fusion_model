@@ -44,8 +44,22 @@ ct_model_Swin_tiny/log.txt
 *.7z
 *.zip
 
-# 各模型训练输出目录(权重 checkpoint、评估指标、CAM 图)
-output/
+# 各模型训练输出仅保留最终发布的权重，其余 checkpoint、评估指标、CAM 图继续忽略
+**/output/**
+!**/output/**/
+
+# ===== 公开发布的权重白名单 =====
+# 最终模型（论文使用的权重）
+!ct_model_Swin_tiny/output/ct_swin_tiny_slice_agg/checkpoints/best_model_seed1085.pt
+!pathology_model/output/pathology_only/checkpoints/best_model_seed2837.pt
+!fusion_model/output/cmt_cpg/checkpoints/best_model_seed1583.pt
+# 消融实验：每个消融组仅保留最新一次 run 的权重
+!fusion_ablation/output/clinical_ct/20261106_160432_454045_seed4977_best_model.pt
+!fusion_ablation/output/clinical_pathology/20261106_161058_267473_seed2941_best_model.pt
+!fusion_ablation/output/ct_pathology/20261106_154330_467644_seed3336_best_model.pt
+
+# 进程标记文件
+*.pid
 
 # fusion_model CAM 分析输出目录(代码脚本保留)
 fusion_model/cam/example/
@@ -63,3 +77,14 @@ clin_model/restore_half_flips_log_20261014_000125.txt
 
 # 特征提取目录中的打包数据与安装包
 feature_extraction/Miniconda3-latest-Linux-x86_64.sh
+
+
+pic/
+
+ppt/
+
+fusion_model/cam/fusion_full_tissue_output_seed1583
+
+fusion_model/cam/fusion_full_tissue_output_seed1583_v2
+fusion_model/cam/gradcam
+fusion_model/cam/output_seed1583_v2

@@ -50,7 +50,7 @@
 - `IMG_SIZE = 128`
 - 默认使用 `timm` 预训练权重
 - 当前配置：`USE_CBAM = True`，`USE_SE = False`
-- 训练脚本按 `val AUC` 选择最佳模型
+- 训练脚本按合并 test 集的 `test AUC` 选择最佳模型，所有轮次参与选模，并列保留首次；前 6 轮只豁免早停计数。
 
 ## 说明
 
@@ -61,8 +61,7 @@
 ## 运行
 
 ```bash
-source /home/guozheng/miniconda3/etc/profile.d/conda.sh
 conda activate wsi
-cd /home/guozheng/claude_dir/wsi_research/ct_model_Swin_tiny
+cd ct_model_Swin_tiny
 python train.py
 ```

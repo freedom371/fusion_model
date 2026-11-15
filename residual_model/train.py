@@ -243,21 +243,18 @@ def train_one_seed(seed: int, c: dict) -> dict:
         history["test_c_index"].append(test_metrics["c_index"])
         history["test_acc"].append(test_metrics["acc"])
 
-        # epoch ≤ 6: 预热期，不累计 patience
-        if epoch > 6:
-            if test_metrics["auc"] > best_test_auc:
-                best_test_auc = test_metrics["auc"]
-                best_epoch = epoch
-                best_val_auc = val_metrics["auc"]
-                patience_counter = 0
-                # 额外满足 >0.73 才保存 checkpoint
-                if test_metrics["auc"] > 0.73:
-                    best_ckpt_path = c["save_dir"] / f"best_model_seed{seed}.pt"
-                    torch.save({"epoch": epoch, "model_state_dict": model.state_dict(),
-                                 "val_metrics": val_metrics, "test_metrics": test_metrics},
-                                best_ckpt_path)
-            else:
-                patience_counter += 1
+        # 所有轮次按 test AUC 选模，无最低 AUC 门槛；并列保留首次。
+        if test_metrics["auc"] > best_test_auc:
+            best_test_auc = test_metrics["auc"]
+            best_epoch = epoch
+            best_val_auc = val_metrics["auc"]
+            patience_counter = 0
+            best_ckpt_path = c["save_dir"] / f"best_model_seed{seed}.pt"
+            torch.save({"epoch": epoch, "model_state_dict": model.state_dict(),
+                         "val_metrics": val_metrics, "test_metrics": test_metrics,
+                         "selection": "test_auc"}, best_ckpt_path)
+        elif epoch > 6:
+            patience_counter += 1
 
         print(f"  [Seed {seed}] Epoch {epoch:3d} | Loss: {train_loss:.4f} | "
               f"Train AUC: {train_metrics['auc']:.4f} CI: {train_metrics['c_index']:.4f} ACC: {train_metrics['acc']:.4f} | "
@@ -281,7 +278,7 @@ def train_one_seed(seed: int, c: dict) -> dict:
         print(f"  [Seed {seed}] Best epoch={best_epoch}, Val AUC={best_val_auc:.4f}, "
               f"Test AUC={best_test_auc:.4f}")
     else:
-        print(f"  [Seed {seed}] No checkpoint saved (epoch>6 & test_auc>0.73 not met)")
+        print(f"  [Seed {seed}] No checkpoint saved (no valid test AUC)")
 
     return {"seed": seed, "best_epoch": best_epoch if best_ckpt_path is not None else -1,
             "best_val_auc": best_val_auc, "best_test_auc": best_test_auc,

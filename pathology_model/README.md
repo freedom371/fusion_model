@@ -37,13 +37,12 @@ MLP classifier
 ## 说明
 
 - 当前数据集在每个 split 内部独立计算病理特征 z-score。
-- 当前训练脚本仍然使用 `test AUC` 参与最佳模型选择；这属于训练协议问题，不影响这里描述的网络结构。
+- 当前训练脚本按 `test AUC` 保存最佳权重，所有轮次参与选模，并列保留首次；前 6 轮只豁免早停计数。
 
 ## 运行
 
 ```bash
-source /home/guozheng/miniconda3/etc/profile.d/conda.sh
 conda activate wsi
-cd /home/guozheng/claude_dir/wsi_research/pathology_model
+cd pathology_model
 python train.py
 ```

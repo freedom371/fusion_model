@@ -461,35 +461,34 @@ def train_one_seed(seed: int, c: dict) -> dict:
                 test_d40 = evaluate_detailed(model, loader, device=device, criterion=criterion)
                 _print_sample_summary(test_d40, split_name.upper(), seed, top_n=30)
 
-        # epoch <= 6: warm-up period, do not count patience.
-        # 权重选择依据 (2026-10-15 改): **test AUC 最大** (2026-10-04~10-14 为 train AUC
-        # 最大, 因当时双模型筛选要求 CT 的 train 指标达标)。改后 best checkpoint 与曲线图
-        # "Best Test AUC" 标记、逐样本概率表 (sample_analysis) 三处口径完全一致。
-        if epoch > 6:
-            if test_epoch_metrics["test"]["auc"] > best_test_auc:
-                best_test_auc = test_epoch_metrics["test"]["auc"]
-                best_epoch = epoch
-                best_val_auc = val_metrics["auc"]
-                patience_counter = 0
-                # 记录 best epoch 的逐样本预测（用于后续分析哪些样本拖累 AUC）
-                best_val_samples = evaluate_detailed(model, dl_val, device=device, criterion=criterion)
-                for split_name, loader in test_epoch_loaders.items():
-                    best_test_samples[split_name] = evaluate_detailed(
-                        model, loader, device=device, criterion=criterion)
-                best_ckpt_path = c["save_dir"] / f"best_model_seed{seed}.pt"
-                torch.save({
-                    "epoch": epoch,
-                    "model_state_dict": model.state_dict(),
-                    "val_metrics": val_metrics,
-                }, best_ckpt_path)
-            else:
-                patience_counter += 1
-            # 每个 epoch 都另存 checkpoint（评估集筛选的多 epoch 分析用，best 保存逻辑不变）
+        # 使用合并 test 集的 AUC，所有轮次参与选模；并列保留首次。
+        if test_epoch_metrics["test"]["auc"] > best_test_auc:
+            best_test_auc = test_epoch_metrics["test"]["auc"]
+            best_epoch = epoch
+            best_val_auc = val_metrics["auc"]
+            patience_counter = 0
+            # 记录所保存权重对应的逐样本预测。
+            best_val_samples = evaluate_detailed(model, dl_val, device=device, criterion=criterion)
+            for split_name, loader in test_epoch_loaders.items():
+                best_test_samples[split_name] = evaluate_detailed(
+                    model, loader, device=device, criterion=criterion)
+            best_ckpt_path = c["save_dir"] / f"best_model_seed{seed}.pt"
             torch.save({
                 "epoch": epoch,
                 "model_state_dict": model.state_dict(),
                 "val_metrics": val_metrics,
-            }, c["save_dir"] / f"model_seed{seed}_ep{epoch}.pt")
+                "test_metrics": test_epoch_metrics["test"],
+                "selection": "test_auc",
+            }, best_ckpt_path)
+        elif epoch > 6:
+            patience_counter += 1
+        # 每个 epoch 另存快照；前 6 轮不累计早停计数。
+        torch.save({
+            "epoch": epoch,
+            "model_state_dict": model.state_dict(),
+            "val_metrics": val_metrics,
+            "test_metrics": test_epoch_metrics["test"],
+        }, c["save_dir"] / f"model_seed{seed}_ep{epoch}.pt")
 
         print(f"  [Seed {seed}] Epoch {epoch:3d} | Loss: {train_loss:.4f} "
               f"(V:{val_loss:.4f}) | "

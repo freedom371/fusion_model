@@ -49,7 +49,7 @@ RANDOM_STATE = 42            # 背景采样种子, 保证 SHAP 结果可复现
 SPLITS_DEFAULT = ["train", "val", "test"]   # 病例来源: label_f.csv 的划分
 LIMIT = None                 # 限制分析例数 (None = 全部)
 CT_DIR = DATA_CT_DIR         # 与训练同源的 CT 目录
-OUTPUT_DIR = Path(__file__).resolve().parent / "output" / "ct_shap_seed1583"
+OUTPUT_DIR = Path(__file__).resolve().parent / "output" / "ct_shap_seed1583_v2"
 
 
 def extract_model_tag(model_path) -> str:
@@ -301,6 +301,10 @@ def main():
         if sv_orig.shape != (H_o, W_o):
             sv_orig = cv2.resize(sv_orig, (W_o, H_o), interpolation=cv2.INTER_LINEAR)
 
+        # ── 身体轮廓掩膜: 原图二值化(>0), 乘掉黑色背景区域的 SHAP ──
+        body_mask = (display_img > 0).astype(np.float32)
+        sv_orig = sv_orig * body_mask
+
         vmax = max(abs(sv_orig.min()), abs(sv_orig.max()))
         if vmax == 0:
             vmax = 1e-6
@@ -330,7 +334,7 @@ def main():
         fig.text(
             0.5, 0.02,
             f"CT max-view attribution only | above/below views, pathology and "
-            f"clinical fixed at train-set means | {model_tag}",
+            f"clinical fixed at train-set means | background-masked (img>0) | {model_tag}",
             ha="center", fontsize=9, color="gray",
         )
 

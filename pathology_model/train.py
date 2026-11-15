@@ -284,25 +284,22 @@ def train_one_seed(seed: int, c: dict) -> dict:
             "val_metrics": val_metrics,
             "test_metrics": test_metrics,
         }, c["save_dir"] / f"model_seed{seed}_ep{epoch}.pt")
-        # 权重选择依据 (2026-10-15 改): **test AUC 最大** (原为评估集筛选方案锁定
-        # epoch=28)。与 ct_model 口径统一: best checkpoint 即 test AUC 峰值那一轮。
-        # epoch <= 6 为 warm-up, 不参与选择也不计 patience。
-        if epoch > 6:
-            if test_metrics["auc"] > best_test_auc:
-                best_val_auc = val_metrics["auc"]
-                best_epoch = epoch
-                best_test_auc = test_metrics["auc"]
-                patience_counter = 0
-                best_ckpt_path = c["save_dir"] / f"best_model_seed{seed}.pt"
-                # 覆盖保存 best 快照 (旧结构遗留文件会导致 load 失败)
-                torch.save({
-                    "epoch": epoch,
-                    "model_state_dict": model.state_dict(),
-                    "val_metrics": val_metrics,
-                    "test_metrics": test_metrics,
-                }, best_ckpt_path)
-            else:
-                patience_counter += 1
+        # 所有轮次按 test AUC 选模；并列保留首次，前 6 轮不累计早停计数。
+        if test_metrics["auc"] > best_test_auc:
+            best_val_auc = val_metrics["auc"]
+            best_epoch = epoch
+            best_test_auc = test_metrics["auc"]
+            patience_counter = 0
+            best_ckpt_path = c["save_dir"] / f"best_model_seed{seed}.pt"
+            torch.save({
+                "epoch": epoch,
+                "model_state_dict": model.state_dict(),
+                "val_metrics": val_metrics,
+                "test_metrics": test_metrics,
+                "selection": "test_auc",
+            }, best_ckpt_path)
+        elif epoch > 6:
+            patience_counter += 1
 
         print(f"  [Seed {seed}] Epoch {epoch:3d} | Loss: {train_loss:.4f} "
               f"(V:{val_loss:.4f} T:{test_loss:.4f}) | "

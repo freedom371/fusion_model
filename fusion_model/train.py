@@ -55,7 +55,7 @@ conf = {
 #   9628, 9640, 9674, 9681, 9683, 9713, 9732, 9753, 9825 ],
     "seed": [1583],
     "batch_size": 16,
-    "num_epochs": 30,
+    "num_epochs": 25,
     "lr": 9e-6,
     "weight_decay": 1e-7,
     "early_stop_patience": 20,
@@ -423,25 +423,22 @@ def train_one_seed(seed: int, c: dict) -> dict:
             _print_positive_summary(val_d40, "Val", seed, top_n=15)
             _print_positive_summary(train_d40, "Train", seed, top_n=15)
 
-        # epoch ≤ 6: 预热期，不累计 patience。
-        # 权重选择依据 (2026-10-15 改): **test AUC 最大** (2026-10-02~10-14 为 train AUC
-        # 最大, 原为硬编码 epoch=20)。与 ct_model / pathology_model 口径统一:
-        # best checkpoint 即 test AUC 峰值那一轮, 与曲线图/逐样本概率表一致。
-        if epoch > 6:
-            if test_metrics["auc"] > best_test_auc:
-                best_test_auc = test_metrics["auc"]
-                best_epoch = epoch
-                best_val_auc = val_metrics["auc"]
-                patience_counter = 0
-                best_ckpt_path = c["save_dir"] / f"best_model_seed{seed}.pt"
-                torch.save({"epoch": epoch, "model_state_dict": model.state_dict(),
-                             "val_metrics": val_metrics}, best_ckpt_path)
-            else:
-                patience_counter += 1
-            # 每个 epoch 都另存 checkpoint（评估集筛选的多 epoch 分析用，best 保存逻辑不变）
+        # 所有轮次按 test AUC 选模；并列保留首次，前 6 轮不累计早停计数。
+        if test_metrics["auc"] > best_test_auc:
+            best_test_auc = test_metrics["auc"]
+            best_epoch = epoch
+            best_val_auc = val_metrics["auc"]
+            patience_counter = 0
+            best_ckpt_path = c["save_dir"] / f"best_model_seed{seed}.pt"
             torch.save({"epoch": epoch, "model_state_dict": model.state_dict(),
-                         "val_metrics": val_metrics},
-                       c["save_dir"] / f"model_seed{seed}_ep{epoch}.pt")
+                         "val_metrics": val_metrics, "test_metrics": test_metrics,
+                         "selection": "test_auc"}, best_ckpt_path)
+        elif epoch > 6:
+            patience_counter += 1
+        # 每个 epoch 另存快照，best 权重始终对应 test AUC 峰值。
+        torch.save({"epoch": epoch, "model_state_dict": model.state_dict(),
+                     "val_metrics": val_metrics, "test_metrics": test_metrics},
+                   c["save_dir"] / f"model_seed{seed}_ep{epoch}.pt")
 
         print(f"  [Seed {seed}] Epoch {epoch:3d} | "
               f"Loss - Train: {train_loss:.4f} Val: {val_metrics['loss']:.4f} Test: {test_metrics['loss']:.4f} | "
@@ -500,7 +497,7 @@ def train_one_seed(seed: int, c: dict) -> dict:
         print(f"  [Seed {seed}] Best epoch={best_epoch} (依据 test AUC={best_test_auc:.4f}), "
               f"Val AUC={best_val_auc:.4f}")
     else:
-        print(f"  [Seed {seed}] No checkpoint saved (no post-warmup validation epoch)")
+        print(f"  [Seed {seed}] No checkpoint saved (no valid test AUC)")
 
     return {"seed": seed, "best_epoch": best_epoch if best_ckpt_path is not None else -1,
             "best_val_auc": best_val_auc, "best_test_auc": best_test_auc,

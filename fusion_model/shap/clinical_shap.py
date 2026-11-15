@@ -115,7 +115,7 @@ def parse_args():
     parser.add_argument("--seed", type=int, default=RANDOM_STATE,
                         help="背景采样随机种子")
     parser.add_argument("--output-dir", type=str, default=None,
-                        help="输出目录, 默认 shap/output/clinical_shap_seed1583")
+                        help="输出目录, 默认 shap/output/clinical_shap_seed1583_v2")
     return parser.parse_args()
 
 
@@ -210,7 +210,7 @@ def main():
     print(f"[3/4] 期望 shape: ({n_all}, {len(CLINICAL_COLS)})")
 
     # ── 4. 保存 SHAP 蜜蜂图 ─────────────────────────────────────────
-    save_dir = args.output_dir or os.path.join(os.path.dirname(__file__), "output", "clinical_shap_seed1583")
+    save_dir = args.output_dir or os.path.join(os.path.dirname(__file__), "output", "clinical_shap_seed1583_v2")
     os.makedirs(save_dir, exist_ok=True)
     save_path = os.path.join(save_dir, "clinical_shap.png")
 

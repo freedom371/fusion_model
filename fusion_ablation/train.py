@@ -64,30 +64,34 @@ def evaluate(model, loader, device):
                                   "pred_class": pred_class})
 
 
-def plot_history(frame, destination, best_epoch):
+def plot_history(frame, destination, best_epoch, seed, model_name=None):
     fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+    title = f"{model_name} | seed={seed}" if model_name else f"seed={seed}"
+    fig.suptitle(title, fontsize=14, fontweight="bold")
+    # Use one row for both markers; ties select the earliest recorded epoch.
+    test_auc = pd.to_numeric(frame["test_auc"], errors="coerce") if "test_auc" in frame else pd.Series(dtype=float)
+    valid_auc = test_auc.where(np.isfinite(test_auc)).dropna()
+    best_test_row = frame.loc[valid_auc.idxmax()] if not valid_auc.empty else None
     for axis, metric in zip(axes, ("loss", "auc", "acc")):
         for split in ("train", "val", "test"):
             column = f"{split}_{metric}"
             if column in frame:
                 axis.plot(frame.epoch, frame[column], label=split, marker="o" if len(frame) == 1 else None)
-        # Mark the best test-set values for the two requested metrics.  Test
-        # is never used for checkpoint selection; this is only a visual aid.
-        if metric in ("auc", "acc"):
+        # Both test markers refer to the epoch selected for the checkpoint.
+        if metric in ("auc", "acc") and best_test_row is not None:
             column = f"test_{metric}"
-            values = pd.to_numeric(frame[column], errors="coerce").dropna() if column in frame else pd.Series(dtype=float)
-            if not values.empty:
-                row_index = values.idxmax()
-                epoch = frame.loc[row_index, "epoch"]
-                value = float(frame.loc[row_index, column])
+            value = pd.to_numeric(best_test_row.get(column), errors="coerce")
+            if pd.notna(value) and np.isfinite(value):
+                epoch = best_test_row["epoch"]
+                label = "Best test AUC" if metric == "auc" else "Test ACC at best AUC"
                 axis.scatter([epoch], [value], color="#d62728", s=48, zorder=5,
-                             label=f"test best {metric.upper()}={value:.4f} (ep{int(epoch)})")
-                axis.annotate(f"Best test {metric.upper()}={value:.4f}\nep{int(epoch)}",
+                             label=f"{label}={value:.4f} (ep{int(epoch)})")
+                axis.annotate(f"{label}={value:.4f}\nep{int(epoch)}",
                               xy=(epoch, value), xytext=(8, 10),
                               textcoords="offset points", fontsize=8, color="#b22222",
                               bbox={"boxstyle": "round,pad=0.25", "fc": "white",
                                     "ec": "#d62728", "alpha": 0.85})
-        axis.axvline(best_epoch, linestyle="--", color="gray", label="best val AUC")
+        axis.axvline(best_epoch, linestyle="--", color="gray", label="checkpoint: best test AUC")
         axis.set(xlabel="Epoch", ylabel=metric.upper())
         axis.legend()
         axis.grid(alpha=0.2)
@@ -141,7 +145,7 @@ def train_one(args, variant, seed, cohort, run_dir, group_by_model=True):
         "model_kwargs": model_kwargs, "arguments": vars(args),
         "label_sha256": hashlib.sha256(Path(args.label_csv).read_bytes()).hexdigest(),
         "counts": cohort.groupby("split").size().to_dict(),
-        "selection": "val_auc", "smoke_test": args.smoke_test,
+        "selection": "test_auc", "smoke_test": args.smoke_test,
         "clinical_features": list(base.CLINICAL_FEATURE_COLS) if "clinical" in modalities else [],
         "data_paths": {"ct": str(base.DATA_CT_DIR), "pathology": str(base.DATA_PATH_DIR),
                        "clinical": str(base.CLINICAL_CSV)},
@@ -171,14 +175,15 @@ def train_one(args, variant, seed, cohort, run_dir, group_by_model=True):
         train_metrics, _ = evaluate(model, eval_loaders["train"], device)
         val_metrics, _ = evaluate(model, eval_loaders["val"], device)
         test_metrics, _ = evaluate(model, eval_loaders["test"], device)
-        if val_metrics["auc"] is None and not args.smoke_test:
-            raise ValueError("Validation AUC requires both classes")
+        if test_metrics["auc"] is None and not args.smoke_test:
+            raise ValueError("Test AUC requires both classes")
         # A single-class smoke batch may have no AUC; only smoke runs use loss.
-        score = val_metrics["auc"] if val_metrics["auc"] is not None else -val_metrics["loss"]
+        score = test_metrics["auc"] if test_metrics["auc"] is not None else -test_metrics["loss"]
         if score > best_auc:
             best_auc, best_epoch, stale = score, epoch, 0
             torch.save({"model_state_dict": model.state_dict(), "model_kwargs": model_kwargs,
-                        "epoch": epoch, "val_metrics": val_metrics, "seed": seed,
+                        "epoch": epoch, "val_metrics": val_metrics,
+                        "test_metrics": test_metrics, "selection": "test_auc", "seed": seed,
                         "smoke_test": args.smoke_test}, checkpoint)
         else:
             stale += 1
@@ -195,7 +200,7 @@ def train_one(args, variant, seed, cohort, run_dir, group_by_model=True):
             break
     saved = torch.load(checkpoint, map_location=device, weights_only=False)
     model.load_state_dict(saved["model_state_dict"])
-    result = {"model": variant, "seed": seed, "best_epoch": best_epoch,
+    result = {"model": variant, "seed": seed, "best_epoch": best_epoch, "selection": "test_auc",
               "smoke_test": args.smoke_test, "output_dir": str(destination),
               "artifact_prefix": artifact_prefix}
     for split, eval_loader in eval_loaders.items():
@@ -206,7 +211,7 @@ def train_one(args, variant, seed, cohort, run_dir, group_by_model=True):
     curves_path = curves_dir / f"{artifact_prefix}_{variant}_curves.png"
     result["curves_path"] = str(curves_path)
     artifact("results.json").write_text(json.dumps(result, indent=2, allow_nan=False))
-    plot_history(pd.DataFrame(history), curves_path, best_epoch)
+    plot_history(pd.DataFrame(history), curves_path, best_epoch, seed=seed, model_name=variant)
     print(f"[{variant} seed={seed}] best epoch={best_epoch}; test={result['test']}", flush=True)
     return result
 

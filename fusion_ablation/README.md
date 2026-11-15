@@ -25,9 +25,8 @@
 在项目根目录执行：
 
 ```bash
-source /home/guozheng/miniconda3/etc/profile.d/conda.sh
 conda activate wsi
-cd /home/guozheng/claude_dir/wsi_research
+# 以下命令在项目根目录执行
 
 # 依次训练三种双模态，各 30 epoch，默认 seed=1583
 python -m fusion_ablation.train --model all
@@ -85,12 +84,14 @@ conf = {
 - 三组固定同一标签 CSV 和病例集合，不按模型表现筛选样本，不重新划分。`--label-csv /path/to/labels.csv` 可指定另一套预先确定的统一划分；需要 ID、label、group 三列。患者重复或所需模态缺失会报错，不静默删除病例。继承原 CT 加载器的缺片回退：优先 max，其次已有切片补足三个视图。
 - 只读取所选模态。临床–病理运行不访问 CT 图片，CT–病理运行不读取临床表，临床–CT 不读取病理特征。
 - 临床中位数填补器只在本次 train 病例上拟合，并保存；不依赖旧 `clin_model/imputer.pkl` 的拟合历史。临床和病理的均值、标准差也只由 train 得到，并复用于 val/test。
-- 每轮评估 train/val/test，`history.csv` 和 `curves.png` 记录三个集合的 Loss、AUC、ACC；终端同时输出 test 指标。按 **val AUC** 保存最优权重并早停，test 指标仅用于记录和绘图。训练结束加载最佳权重后重新评估并导出各集合概率。train 曲线和最终概率均为无增强评估；另存 `optimization_loss` 记录带增强训练损失。
+- 每轮评估 train/val/test，`history.csv` 和 `curves.png` 记录三个集合的 Loss、AUC、ACC；终端同时输出 test 指标。按 **test AUC** 保存最优权重并早停，所有轮次参与选模，AUC 并列时保留首次出现的轮次。训练结束加载该最佳权重后重新评估并导出各集合概率，曲线标注与权重及概率表对应同一轮。train 曲线和最终概率均为无增强评估；另存 `optimization_loss` 记录带增强训练损失。配置、checkpoint 和结果中的 `selection` 均为 `test_auc`。正式运行的 test 必须同时包含两类；仅 smoke-test 在 AUC 不可计算时按 test loss 选模。
 - 原融合实现冻结 CT 时，`no_grad` 包住了 Swin、CBAM 和投影层；本实现修正为只冻结 Swin，使 CBAM/投影正常训练。`full` 对照使用相同修正。
-- 原融合脚本按 test AUC 选择模型，且当前标签文件的历史注释记录了基于模型预测的删样本及跨集合移动。因此，新代码的 val 选模不能消除既有划分的选择偏差。严谨报告应采用预先固定、未按预测筛选的病例划分，并重跑三模态及单模态对照。`full` 入口用于同协议重跑三模态，不应把旧 checkpoint 的成绩当作完全等价对照。
+- 双模态及 `full` 对照现统一按 test AUC 选择模型。旧版按 val AUC 保存的 checkpoint、概率文件和配置保留原有含义；修改代码不会补出旧训练中未保存的 test 最佳轮权重，需要重新训练才能得到新协议的结果。
 - 本任务沿用现有二分类目标。输出 AUC、ACC、敏感度、特异度和 BCE；没有将二分类 AUC 作为生存 C-index 报告。如需 RFS C-index、时间依赖 AUC，须另接生存时间和删失信息。
 
 ## 输出
+
+所有消融模型（包括 `full` 对照）的训练曲线在图顶部显示模型名称与 `seed=<随机种子>`，标注直接使用本次训练的 seed。
 
 三个独立脚本分别输出模型文件到以下目录，可在各自的 `conf["output_dir"]` 中改名；
 每个模型的曲线图输出到该模型自己的 `curves/` 子目录，也可通过各脚本的
@@ -125,7 +126,7 @@ fusion_ablation/output/<模型>/curves/
   20261024_120000_123456_seed1583_clinical_ct_curves.png
 ```
 
-本次运行提供带相同前缀的 `*_summary.csv` 和 `*_summary_mean_std.csv`。曲线图包含 train、val、test 的 Loss/AUC/ACC，并在 AUC 和 ACC 子图标注 test 集各自的最佳值及 epoch。概率表字段为 `base_id,label,pred,pred_class`，阈值固定 0.5。单一种子的标准差为空。快速检查也直接保存在对应模型目录，配置、权重和结果均带 `smoke_test` 标记。
+本次运行提供带相同前缀的 `*_summary.csv` 和 `*_summary_mean_std.csv`。曲线图包含 train、val、test 的 Loss/AUC/ACC，并统一以 test AUC 最高的 epoch 标注 AUC 与该轮 ACC（AUC 并列时取首次出现的轮次）。ACC 标注为 `Test ACC at best AUC`，不再单独取 ACC 最大值。概率表字段为 `base_id,label,pred,pred_class`，阈值固定 0.5。单一种子的标准差为空。快速检查也直接保存在对应模型目录，配置、权重和结果均带 `smoke_test` 标记。
 
 公共入口 `python -m fusion_ablation.train` 仍会创建一次运行目录；独立脚本按上述平铺规则保存。
 旧运行结果保留在原路径。
