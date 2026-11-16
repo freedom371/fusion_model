@@ -1,8 +1,0 @@
-Paper-ready model architecture diagram on a white background.
-Clean academic block diagram with arrows, readable English labels, no decorative elements.
-Title: Pathology UNI2 Binary Recurrence Model.
-Show these blocks from left to right:
-Input: UNI2 slide feature, shape (B, 1536).
-MLP classifier: Dropout, Linear 1536 to 512, LayerNorm, ReLU, Dropout, Linear 512 to 128, LayerNorm, ReLU, Dropout, Linear 128 to 32, LayerNorm, ReLU, Dropout, Linear 32 to 1.
-Use straight arrows between blocks.
-Use consistent colors for blocks, thin lines, professional scientific figure style, high legibility.
