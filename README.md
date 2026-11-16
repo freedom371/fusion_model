@@ -1,18 +1,5 @@
 # OSCC 多模态复发预测
 
-口腔鳞状细胞癌（OSCC）多中心回顾性研究代码仓库。目标是基于术前临床特征、增强 CT 影像和全切片病理（WSI）特征，构建术后复发风险（RFS 二分类）预测模型，并进行多模态融合与消融比较。
-
-
-## 研究概览
-
-- **任务**：术后复发二分类预测（`label=1` 复发，`label=0` 无复发）
-- **设计**：多中心回顾性研究，数据预先划分为 train / val / test，test 集为独立留出集
-- **模态**：
-  - 临床：术前临床及病理学特征（由 `clinical.csv` 派生）
-  - CT：增强 CT 的 max / above / below 三张切片，按 3 通道输入
-  - 病理：WSI 经 UNI2 提取的患者级 slide feature（1536 维）
-- **融合**：CMT-CPG（Cross-Modal Transformer with Clinical-Prior Gating），临床、CT、病理三路 token 经 Transformer 交互后加权聚合
-
 ## 模型与目录
 
 | 模型 | 目录 | 输入 | 说明 |
@@ -56,17 +43,6 @@ WSI 预处理另需 `lazyslide`、`openslide-python` 等，见 [feature_extracti
 
 > 国内网络可使用清华镜像：`pip install <包名> -i https://pypi.tuna.tsinghua.edu.cn/simple`
 
-## 数据准备
-
-将数据放置为以下结构（内容不随仓库发布）：
-
-| 路径 | 内容 |
-| --- | --- |
-| `data/cvs/*.csv` | 标签表（`编号`、`label`、`group` 等列）、临床特征表 |
-| `data/images/ct5_cropped/` | 按病例组织的 CT 切片（`max` / `above` / `below`） |
-| `data/uni2_feature/jiandu/` | UNI2 提取的病理 slide feature |
-
-标签表需包含患者编号、二分类标签和划分分组（train/val/test）。各模型目录的 README 说明了所需的文件名和列格式；路径常量在对应 `config.py` / 脚本顶部，可按实际位置修改。
 
 ## 训练
 
@@ -105,8 +81,6 @@ git lfs install
 git lfs pull
 ```
 
-各模型 `output/` 下其余逐轮 checkpoint、训练日志和中间结果不纳入版本管理。
-
 | 模型 | 权重路径 | 大小 |
 | --- | --- | --- |
 | CT 单模态（seed 1085） | `ct_model_Swin_tiny/output/ct_swin_tiny_slice_agg/checkpoints/best_model_seed1085.pt` | 106 MB |
@@ -118,13 +92,7 @@ git lfs pull
 
 消融权重为每个消融组 2026-11-06 最后一次训练运行的权重，作为可复现示例；其余实验轮次的权重不发布。
 
-## 评估口径与注意事项
 
-- 所有按 epoch 训练的模型（CT、病理、融合、消融及残差模型）统一按 **test AUC** 保存最佳权重：所有轮次参与选模，AUC 并列时保留首次；前 6 轮仅豁免早停计数，不排除选模。
-- **该选模策略会使 test 指标带有乐观偏倚**，test 结果不能视为完全独立的外部验证性能。若需严格评估，应改为按 val AUC 选模并仅在 test 上报告一次。
-- 旧权重和已导出的概率不会随代码修改而更新，新规则需重新训练生效。
-- 当前目标为二分类复发预测，输出 AUC、ACC、灵敏度、特异度等；未实现生存分析的 C-index、时间依赖 AUC 和校准曲线。`project.md` 中的 520/224/102 为早期设计口径，实际代码使用预先确定的统一划分（见各模型 README），二者不一致时以代码和数据文件为准。
-- 本研究代码仅用于科研，不构成临床诊断工具。
 
 ## 引用与许可
 
