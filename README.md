@@ -9,9 +9,8 @@
 | 病理单模态 | [pathology_model/](pathology_model/) | UNI2 特征 | `1536 → 512 → 128 → 32 → 1` MLP |
 | 三模态融合 | [fusion_model/](fusion_model/) | 临床 + CT + 病理 | CMT-CPG 跨模态 Transformer |
 | 双模态消融 | [fusion_ablation/](fusion_ablation/) | 临床-CT / 临床-病理 / CT-病理 | 从头训练融合层，另含同协议三模态 `full` 对照 |
-| 残差/基线模型 | [residual_model/](residual_model/) | CT + 病理 + 临床 | 对照实验 |
 
-各子目录 README 包含该模型的详细结构、输入输出和训练参数。
+ 
 
 ## 项目结构
 
