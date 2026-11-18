@@ -89,7 +89,7 @@ git lfs pull
 | 消融：临床-病理（seed 2941） | `fusion_ablation/output/clinical_pathology/20261106_161058_267473_seed2941_best_model.pt` | 708 KB |
 | 消融：CT-病理（seed 3336） | `fusion_ablation/output/ct_pathology/20261106_154330_467644_seed3336_best_model.pt` | 107 MB |
 
-消融权重为每个消融组 2026-11-06 最后一次训练运行的权重，作为可复现示例；其余实验轮次的权重不发布。
+ 
 
 
 
